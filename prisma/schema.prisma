@@ -1,0 +1,96 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────
+
+enum Staleness {
+  OK
+  REVIEW_RECOMMENDED
+  POTENTIALLY_OUTDATED
+  BROKEN
+}
+
+// ─────────────────────────────────────────────
+// Models
+// ─────────────────────────────────────────────
+
+model Repository {
+  id          String      @id @default(cuid())
+  owner       String
+  name        String
+  branch      String      @default("main")
+  lastCommit  String?
+  ingestedAt  DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  codeUnits   CodeUnit[]
+  changes     Change[]
+
+  @@unique([owner, name, branch])
+}
+
+model CodeUnit {
+  id          String      @id @default(cuid())
+  repoId      String
+  repo        Repository  @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  filePath    String
+  name        String
+  type        String      // "function" | "class" | "module" | "method" | "arrow_function"
+  language    String      // "typescript" | "javascript" | "python"
+  signature   String?
+  docstring   String?
+  rawCode     String      @db.Text
+  lineStart   Int
+  lineEnd     Int
+  createdAt   DateTime    @default(now())
+
+  doc         Documentation?
+
+  @@index([repoId, filePath])
+  @@index([repoId, name])
+}
+
+model Documentation {
+  id              String      @id @default(cuid())
+  unitId          String      @unique
+  unit            CodeUnit    @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  content         String      @db.Text   // Current approved doc (Markdown)
+  draftContent    String?     @db.Text   // Pending LLM-generated update (Markdown)
+  qdrantPointId   String?                // UUID reference to vector in Qdrant
+
+  staleness       Staleness   @default(OK)
+
+  generatedAt     DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model Change {
+  id            String      @id @default(cuid())
+  repoId        String
+  repo          Repository  @relation(fields: [repoId], references: [id], onDelete: Cascade)
+
+  commitSha     String
+  commitMsg     String
+  author        String?
+  authorEmail   String?
+  committedAt   DateTime?   // Timestamp from GitHub
+  detectedAt    DateTime    @default(now())
+
+  affectedDocs  Json        // String[] — array of Documentation IDs
+  diffContent   String?     @db.Text // Raw git diff text
+
+  @@unique([repoId, commitSha])
+  @@index([repoId, detectedAt])
+}

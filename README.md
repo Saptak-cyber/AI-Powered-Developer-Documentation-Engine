@@ -1,36 +1,75 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 📖 AI-Powered Developer Documentation Engine
 
-## Getting Started
+An automated documentation engine that automatically indexes and tracks your GitHub repositories, parses code units (classes, functions, methods, modules), generates complete Markdown documentation via LLMs, monitors commits for changes, flags staleness severity, drafts diff updates, and exposes a high-fidelity RAG chat interface.
 
-First, run the development server:
+Built with **Next.js 14+ (App Router)**, **TypeScript**, **Tailwind CSS**, **Prisma ORM**, **Neon DB**, and **Qdrant Vector Cloud**.
 
+---
+
+## 🌟 Key Features
+
+1. **GitHub Ingestion**: Fetch repository file trees, filter by extension, and download files in parallel.
+2. **Double AST Parser**:
+   - **Babel (JS/TS)**: Extracts functions, arrow functions, classes, and class methods.
+   - **Python Parser**: Extracts classes, standalone functions, nested methods, parameters with type hints, and code blocks using indentation matching.
+3. **Staleness Flagging**: Auto-categorizes code updates into `OK`, `REVIEW_RECOMMENDED`, `POTENTIALLY_OUTDATED`, or `BROKEN` by comparing signature and body changes.
+4. **Draft Diff Reviews**: Presents proposed documentation changes side-by-side with original docs for developer approval and single-click publish.
+5. **Contextual RAG Chat**: High-fidelity RAG query system built with Qdrant vector similarity indexes to answer query questions using real source file code references.
+6. **Premium Dark Theme**: Space mesh gradient background animations, custom modern scrollbars, and card highlights.
+
+---
+
+## 🚀 Setup & Installation
+
+### 1. Prerequisites
+Ensure you have Node.js 18+ installed on your system.
+
+### 2. Install Dependencies
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 3. Database Migration
+```bash
+npx prisma generate
+npx prisma db push
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 4. Configuration (`.env.local`)
+Create a `.env.local` file in the root of the project with the following configuration:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+# ─── LLM Provider (OpenAI-compatible) ───────────────────────────
+LLM_API_KEY=your-api-key
+LLM_BASE_URL=https://api.openai.com/v1
+LLM_MODEL=gpt-4o-mini
 
-## Learn More
+# ─── Embedding Model ─────────────────────────────────────────────
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSIONS=1536
 
-To learn more about Next.js, take a look at the following resources:
+# ─── Neon DB ─────────────────────────────────────────────────────
+DATABASE_URL=postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# ─── Qdrant Cloud ────────────────────────────────────────────────
+QDRANT_URL=https://xxx.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key
+QDRANT_COLLECTION=doc_embeddings
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+# ─── GitHub ──────────────────────────────────────────────────────
+GITHUB_TOKEN=ghp_your_personal_access_token
+```
 
-## Deploy on Vercel
+---
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 💻 Running the Application
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Start the Next.js development server:
+```bash
+npm run dev
+```
+
+Build the production bundle:
+```bash
+npm run build
+```

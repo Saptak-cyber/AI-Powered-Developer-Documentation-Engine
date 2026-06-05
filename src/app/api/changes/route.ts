@@ -1,0 +1,151 @@
+import { NextRequest, NextResponse } from "next/server";
+import { getCommitsSince, getCommitDiff, getFileContent } from "@/lib/github";
+import { parseTypeScript } from "@/lib/parsers/babel";
+import { parsePython } from "@/lib/parsers/treesitter";
+import { classifyStaleness } from "@/lib/staleness";
+import { prisma } from "@/lib/db";
+
+export async function POST(req: NextRequest) {
+  try {
+    const { repoId } = await req.json();
+
+    if (!repoId) {
+      return NextResponse.json({ error: "Missing repoId" }, { status: 400 });
+    }
+
+    const repo = await prisma.repository.findUnique({
+      where: { id: repoId },
+    });
+
+    if (!repo || !repo.lastCommit) {
+      return NextResponse.json({ error: "Repository not found or has no initial commit" }, { status: 404 });
+    }
+
+    // 1. Fetch new commits since the last known commit
+    const commits = await getCommitsSince(repo.owner, repo.name, repo.branch, repo.lastCommit);
+    
+    if (commits.length === 0) {
+      return NextResponse.json({ success: true, message: "No new commits found", newCommits: 0 });
+    }
+
+    let detectedChanges = 0;
+
+    // Process from oldest to newest
+    for (const commit of commits.reverse()) {
+      // Check if we already processed this commit
+      const existingChange = await prisma.change.findUnique({
+        where: { repoId_commitSha: { repoId, commitSha: commit.sha } },
+      });
+
+      if (existingChange) continue;
+
+      // 2. Fetch diff for the commit
+      const diffText = await getCommitDiff(repo.owner, repo.name, commit.sha);
+      
+      // Very basic diff parsing to find changed files
+      // A more robust solution would use a proper diff parser
+      const changedFiles = new Set<string>();
+      const diffLines = diffText.split('\n');
+      for (const line of diffLines) {
+        if (line.startsWith('+++ b/')) {
+          changedFiles.add(line.substring(6));
+        }
+      }
+
+      const affectedDocs: string[] = [];
+
+      // 3. For each changed file, analyze code units
+      for (const filePath of Array.from(changedFiles)) {
+        if (!filePath.match(/\.(ts|tsx|js|jsx|py)$/)) continue;
+
+        try {
+          // Fetch the NEW content
+          const newContent = await getFileContent(repo.owner, repo.name, commit.sha);
+          const newUnits = filePath.endsWith(".py")
+            ? parsePython(newContent, filePath)
+            : parseTypeScript(newContent, filePath);
+          const newUnitsMap = new Map(newUnits.map(u => [u.name, u]));
+
+          // Find existing (OLD) units for this file
+          const oldUnits = await prisma.codeUnit.findMany({
+            where: { repoId, filePath },
+            include: { doc: true },
+          });
+
+          // 4. Compare old vs new to flag staleness
+          for (const oldUnit of oldUnits) {
+            if (!oldUnit.doc) continue; // No doc to become stale
+
+            const newUnit = newUnitsMap.get(oldUnit.name);
+            let staleness: any = "OK";
+
+            if (!newUnit) {
+               // The unit was deleted! We should probably mark it as BROKEN or delete it.
+               staleness = "BROKEN";
+            } else {
+               staleness = classifyStaleness(
+                 oldUnit.signature,
+                 newUnit.signature,
+                 oldUnit.rawCode,
+                 newUnit.rawCode,
+                 false
+               );
+
+               // Update the CodeUnit in DB with the new implementation
+               await prisma.codeUnit.update({
+                 where: { id: oldUnit.id },
+                 data: {
+                   signature: newUnit.signature,
+                   rawCode: newUnit.rawCode,
+                   lineStart: newUnit.lineStart,
+                   lineEnd: newUnit.lineEnd,
+                   docstring: newUnit.docstring,
+                 }
+               });
+            }
+
+            if (staleness !== "OK") {
+              await prisma.documentation.update({
+                where: { id: oldUnit.doc.id },
+                data: { staleness },
+              });
+              affectedDocs.push(oldUnit.doc.id);
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to analyze changes in ${filePath}:`, err);
+        }
+      }
+
+      // Record the change
+      await prisma.change.create({
+        data: {
+          repoId,
+          commitSha: commit.sha,
+          commitMsg: commit.commit.message,
+          author: commit.commit.author?.name || "Unknown",
+          authorEmail: commit.commit.author?.email,
+          committedAt: commit.commit.author?.date ? new Date(commit.commit.author.date) : null,
+          affectedDocs: JSON.stringify(affectedDocs),
+          diffContent: diffText,
+        }
+      });
+
+      // Update repo's last known commit
+      await prisma.repository.update({
+        where: { id: repoId },
+        data: { lastCommit: commit.sha }
+      });
+
+      detectedChanges++;
+    }
+
+    return NextResponse.json({
+      success: true,
+      newCommitsProcessed: detectedChanges,
+    });
+  } catch (error: any) {
+    console.error("Change Detection Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
