@@ -4,6 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Book, FileCode2, GitBranch, FolderOpen, ArrowRight, Terminal, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { DeleteRepoButton } from "@/components/DeleteRepoButton";
 
 export const dynamic = "force-dynamic";
 
@@ -136,11 +137,14 @@ export default async function DashboardPage() {
                           )}
                         </div>
                       </div>
-                      <Link href={`/docs?repoId=${repo.id}`}>
-                        <Button size="icon" variant="ghost" className="hover:translate-x-1 transition-transform">
-                          <ArrowRight className="w-4 h-4" />
-                        </Button>
-                      </Link>
+                      <div className="flex items-center gap-1">
+                        <DeleteRepoButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
+                        <Link href={`/docs?repoId=${repo.id}`}>
+                          <Button size="icon" variant="ghost" className="hover:translate-x-1 transition-transform">
+                            <ArrowRight className="w-4 h-4" />
+                          </Button>
+                        </Link>
+                      </div>
                     </CardContent>
                   </Card>
                 ))

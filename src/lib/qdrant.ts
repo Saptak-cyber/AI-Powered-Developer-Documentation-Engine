@@ -98,3 +98,13 @@ export async function deleteDocEmbedding(pointId: string): Promise<void> {
     points: [pointId],
   });
 }
+
+// ─── Delete all points for a given repo (Cascading cleanup) ────────────────
+export async function deleteRepoEmbeddings(repoId: string): Promise<void> {
+  await qdrant.delete(COLLECTION_NAME, {
+    wait: true,
+    filter: {
+      must: [{ key: "repoId", match: { value: repoId } }],
+    },
+  });
+}
