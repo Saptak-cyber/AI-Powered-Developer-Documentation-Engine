@@ -1,7 +1,8 @@
 import OpenAI from "openai";
+import { HfInference } from "@huggingface/inference";
 
 // ─── Validate required env vars at module load ────────────────────────────────
-const requiredEnvVars = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDING_MODEL"];
+const requiredEnvVars = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDING_MODEL", "HF_API_KEY"];
 for (const key of requiredEnvVars) {
   if (!process.env[key] && process.env.NODE_ENV !== "development") {
     console.warn(`Warning: Missing required environment variable: ${key}`);
@@ -23,8 +24,14 @@ export const llmClient = new OpenAI({
 });
 
 export const LLM_MODEL = process.env.LLM_MODEL || "dummy_model";
-export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "dummy_embedding_model";
-export const EMBEDDING_DIMENSIONS = parseInt(process.env.EMBEDDING_DIMENSIONS ?? "1536", 10);
+export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "BAAI/bge-small-en-v1.5";
+export const EMBEDDING_DIMENSIONS = parseInt(process.env.EMBEDDING_DIMENSIONS ?? "384", 10);
+
+/**
+ * HuggingFace Inference client for embedding generation.
+ * Uses HF_API_KEY env var.
+ */
+export const hfClient = new HfInference(process.env.HF_API_KEY || "dummy_hf_key");
 
 // ─── Helper: chat completion (non-streaming) ─────────────────────────────────
 export async function chatCompletion(
@@ -39,11 +46,24 @@ export async function chatCompletion(
   return response.choices[0]?.message?.content ?? "";
 }
 
-// ─── Helper: generate embedding vector ───────────────────────────────────────
+// ─── Helper: generate embedding vector via HuggingFace Inference API ─────────
 export async function generateEmbedding(text: string): Promise<number[]> {
-  const response = await llmClient.embeddings.create({
+  const truncated = text.slice(0, 4096); // HF models have shorter context windows
+
+  const result = await hfClient.featureExtraction({
     model: EMBEDDING_MODEL,
-    input: text.slice(0, 8000), // Safety truncation for token limits
+    inputs: truncated,
   });
-  return response.data[0].embedding;
+
+  // featureExtraction returns number[] | number[][] depending on the model.
+  // For sentence-transformer / bi-encoder models the output is number[].
+  // For batch inputs it's number[][].
+  if (Array.isArray(result) && typeof result[0] === "number") {
+    return result as number[];
+  }
+  // First element of a batch result
+  if (Array.isArray(result) && Array.isArray(result[0])) {
+    return result[0] as number[];
+  }
+  throw new Error(`Unexpected featureExtraction output shape from model: ${EMBEDDING_MODEL}`);
 }

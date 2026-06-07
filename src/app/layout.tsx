@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Book, GitBranch, MessageSquare, LayoutDashboard } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
+import "./globals.css";
 
 export default function RootLayout({
   children,
