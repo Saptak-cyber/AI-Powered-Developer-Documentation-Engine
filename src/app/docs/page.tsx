@@ -1,54 +1,67 @@
 import { prisma } from "@/lib/db";
 import { DocCard } from "@/components/DocCard";
 import { Input } from "@/components/ui/input";
-import { Search, GitBranch, AlertCircle, BookOpen } from "lucide-react";
+import { Search, AlertCircle, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Staleness } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 
 export default async function DocsPage({
   searchParams,
 }: {
-  searchParams: { q?: string; staleness?: string; repoId?: string };
+  searchParams: Promise<{ q?: string; staleness?: string; repoId?: string }>;
 }) {
-  const query = searchParams.q || "";
-  const stalenessFilter = searchParams.staleness || "ALL";
-  const selectedRepoId = searchParams.repoId || "ALL";
+  const params = await searchParams;
+  const query = params.q || "";
+  const stalenessFilter = params.staleness || "ALL";
+  const selectedRepoId = params.repoId || "ALL";
 
   // Fetch all repositories for filter dropdown
   const repos = await prisma.repository.findMany({
-    orderBy: { createdAt: "desc" }
+    orderBy: { createdAt: "desc" },
   });
 
-  // Build where clause
-  const where: any = {};
+  // ── Build where clause for CodeUnit ────────────────────────────────────────
+  const unitWhere: any = {};
+
   if (selectedRepoId !== "ALL") {
-    where.repoId = selectedRepoId;
+    unitWhere.repoId = selectedRepoId;
   }
+
   if (query) {
-    where.OR = [
+    unitWhere.OR = [
       { name: { contains: query, mode: "insensitive" } },
       { filePath: { contains: query, mode: "insensitive" } },
     ];
   }
 
+  // ── Staleness filter: push to DB level so pagination stays accurate ─────────
+  // We filter via the nested Documentation relation rather than in-memory.
+  if (stalenessFilter !== "ALL") {
+    const validStatuses: Staleness[] = [
+      "OK",
+      "REVIEW_RECOMMENDED",
+      "POTENTIALLY_OUTDATED",
+      "BROKEN",
+    ];
+    if (validStatuses.includes(stalenessFilter as Staleness)) {
+      // Only return units that have a doc AND that doc has the requested staleness
+      unitWhere.doc = {
+        staleness: stalenessFilter as Staleness,
+      };
+    }
+  }
+
   const units = await prisma.codeUnit.findMany({
-    where,
+    where: unitWhere,
     include: {
       doc: true,
-      repo: true
+      repo: true,
     },
-    orderBy: {
-      name: "asc"
-    },
-    take: 50,
+    orderBy: { name: "asc" },
+    take: 100,
   });
-
-  // Filter in memory for staleness
-  let filteredUnits = units;
-  if (stalenessFilter !== "ALL") {
-    filteredUnits = units.filter((u: any) => u.doc?.staleness === stalenessFilter);
-  }
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto py-4">
@@ -64,23 +77,29 @@ export default async function DocsPage({
       </div>
 
       {/* Filter Form */}
-      <form method="GET" action="/docs" className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border border-white/5 bg-white/[0.02]">
+      <form
+        method="GET"
+        action="/docs"
+        className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border border-white/5 bg-white/[0.02]"
+      >
         {/* Search Query */}
         <div className="relative flex-1">
           <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input 
+          <Input
             name="q"
-            placeholder="Search by function, class or file path..." 
+            placeholder="Search by function, class or file path..."
             className="pl-9 bg-slate-950/40 border-white/5 focus:border-primary"
             defaultValue={query}
           />
         </div>
 
-        {/* Repository Filter */}
         <div className="flex flex-col sm:flex-row gap-4">
+          {/* Repository Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">Repo:</span>
-            <select 
+            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+              Repo:
+            </span>
+            <select
               name="repoId"
               defaultValue={selectedRepoId}
               className="h-10 px-3 bg-slate-950 border border-white/5 rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-mono w-full sm:w-48"
@@ -96,36 +115,45 @@ export default async function DocsPage({
 
           {/* Staleness Filter */}
           <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">Status:</span>
-            <select 
+            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
+              Status:
+            </span>
+            <select
               name="staleness"
               defaultValue={stalenessFilter}
               className="h-10 px-3 bg-slate-950 border border-white/5 rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-mono w-full sm:w-48"
             >
               <option value="ALL">All Statuses</option>
-              <option value="OK">OK</option>
-              <option value="REVIEW_RECOMMENDED">Review Recommended</option>
-              <option value="POTENTIALLY_OUTDATED">Potentially Outdated</option>
-              <option value="BROKEN">Broken</option>
+              <option value="OK">✅ OK</option>
+              <option value="REVIEW_RECOMMENDED">🔵 Review Recommended</option>
+              <option value="POTENTIALLY_OUTDATED">⚠️ Potentially Outdated</option>
+              <option value="BROKEN">🔴 Broken</option>
             </select>
           </div>
 
-          {/* Submit Action */}
+          {/* Submit */}
           <Button type="submit" className="w-full sm:w-auto px-6 font-semibold">
             Apply Filters
           </Button>
         </div>
       </form>
 
+      {/* Result count hint */}
+      <p className="text-xs text-muted-foreground font-mono">
+        Showing {units.length} result{units.length !== 1 ? "s" : ""}
+        {stalenessFilter !== "ALL" ? ` · filtered by status: ${stalenessFilter}` : ""}
+        {selectedRepoId !== "ALL" ? ` · 1 repository` : ""}
+      </p>
+
       {/* Docs Grid */}
-      {filteredUnits.length === 0 ? (
+      {units.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground border border-dashed border-white/10 rounded-2xl bg-white/[0.01] flex flex-col items-center justify-center gap-3">
           <AlertCircle className="w-10 h-10 opacity-30 text-primary" />
           <p className="font-mono text-sm">No documentation found matching your filters.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredUnits.map((unit: any) => (
+          {units.map((unit: any) => (
             <DocCard key={unit.id} unit={unit as any} />
           ))}
         </div>

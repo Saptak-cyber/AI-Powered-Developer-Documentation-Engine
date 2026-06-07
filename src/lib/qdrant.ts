@@ -10,6 +10,7 @@ export const qdrant =
   new QdrantClient({
     url: process.env.QDRANT_URL!,
     apiKey: process.env.QDRANT_API_KEY!,
+    checkCompatibility: false,
   });
 
 if (process.env.NODE_ENV !== "production") {
@@ -40,7 +41,15 @@ export async function ensureCollection(): Promise<void> {
         distance: "Cosine",
       },
     });
-    console.log(`[Qdrant] Created collection: ${COLLECTION_NAME}`);
+    
+    // Create payload index for repoId filtering to prevent Bad Request errors during search
+    await qdrant.createPayloadIndex(COLLECTION_NAME, {
+      field_name: "repoId",
+      field_schema: "keyword",
+      wait: true,
+    });
+    
+    console.log(`[Qdrant] Created collection: ${COLLECTION_NAME} with repoId index`);
   }
 }
 

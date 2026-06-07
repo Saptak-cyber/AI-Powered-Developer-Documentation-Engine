@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCommitsSince, getCommitDiff, getFileContent } from "@/lib/github";
+import { getCommitsSince, getCommitDiff, getFileAtCommit } from "@/lib/github";
 import { parseTypeScript } from "@/lib/parsers/babel";
 import { parsePython } from "@/lib/parsers/treesitter";
 import { classifyStaleness } from "@/lib/staleness";
@@ -59,8 +59,8 @@ export async function POST(req: NextRequest) {
         if (!filePath.match(/\.(ts|tsx|js|jsx|py)$/)) continue;
 
         try {
-          // Fetch the NEW content
-          const newContent = await getFileContent(repo.owner, repo.name, commit.sha);
+          // Fetch the NEW content of this file at this specific commit
+          const newContent = await getFileAtCommit(repo.owner, repo.name, filePath, commit.sha);
           const newUnits = filePath.endsWith(".py")
             ? parsePython(newContent, filePath)
             : parseTypeScript(newContent, filePath);

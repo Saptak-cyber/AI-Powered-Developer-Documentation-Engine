@@ -60,7 +60,8 @@ export async function getRepoTree(owner: string, repo: string, branch: string = 
 }
 
 /**
- * Fetches the content of a specific file from GitHub.
+ * Fetches the content of a specific file by its blob SHA from GitHub.
+ * Used during ingestion where we already have the blob SHA from the tree.
  */
 export async function getFileContent(owner: string, repo: string, fileSha: string): Promise<string> {
   const { data } = await github.git.getBlob({
@@ -71,6 +72,36 @@ export async function getFileContent(owner: string, repo: string, fileSha: strin
 
   // Decode base64 content
   return Buffer.from(data.content, "base64").toString("utf-8");
+}
+
+/**
+ * Fetches the content of a specific file at a given commit SHA.
+ * Used during change detection where we have a commit SHA and a file path.
+ */
+export async function getFileAtCommit(
+  owner: string,
+  repo: string,
+  filePath: string,
+  ref: string
+): Promise<string> {
+  const { data } = await github.repos.getContent({
+    owner,
+    repo,
+    path: filePath,
+    ref,
+  });
+
+  // getContent returns an array for directories; for files it's a single object
+  if (Array.isArray(data)) {
+    throw new Error(`Path '${filePath}' resolves to a directory, not a file`);
+  }
+
+  const fileData = data as { encoding?: string; content?: string };
+  if (fileData.encoding !== "base64" || !fileData.content) {
+    throw new Error(`Unexpected content format for '${filePath}'`);
+  }
+
+  return Buffer.from(fileData.content, "base64").toString("utf-8");
 }
 
 /**

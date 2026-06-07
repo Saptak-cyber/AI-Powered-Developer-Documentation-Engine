@@ -9,13 +9,14 @@ export const dynamic = "force-dynamic";
 export default async function ChatPage({
   searchParams,
 }: {
-  searchParams: { repoId?: string };
+  searchParams: Promise<{ repoId?: string }>;
 }) {
   const repos = await prisma.repository.findMany({
     orderBy: { name: "asc" },
   });
 
-  const selectedRepoId = searchParams.repoId || (repos.length > 0 ? repos[0].id : undefined);
+  const params = await searchParams;
+  const selectedRepoId = params.repoId || (repos.length > 0 ? repos[0].id : undefined);
 
   if (repos.length === 0) {
     return (

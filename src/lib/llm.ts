@@ -1,12 +1,15 @@
 import OpenAI from "openai";
-import { HfInference } from "@huggingface/inference";
+import { InferenceClient } from "@huggingface/inference";
 
 // ─── Validate required env vars at module load ────────────────────────────────
-const requiredEnvVars = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDING_MODEL", "HF_API_KEY"];
+const requiredEnvVars = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDING_MODEL"];
 for (const key of requiredEnvVars) {
   if (!process.env[key] && process.env.NODE_ENV !== "development") {
     console.warn(`Warning: Missing required environment variable: ${key}`);
   }
+}
+if (!process.env.HF_TOKEN && !process.env.HF_API_KEY && process.env.NODE_ENV !== "development") {
+  console.warn("Warning: Missing required environment variable: HF_TOKEN or HF_API_KEY");
 }
 
 /**
@@ -29,9 +32,9 @@ export const EMBEDDING_DIMENSIONS = parseInt(process.env.EMBEDDING_DIMENSIONS ??
 
 /**
  * HuggingFace Inference client for embedding generation.
- * Uses HF_API_KEY env var.
+ * Uses HF_TOKEN or HF_API_KEY env var.
  */
-export const hfClient = new HfInference(process.env.HF_API_KEY || "dummy_hf_key");
+export const hfClient = new InferenceClient(process.env.HF_TOKEN || process.env.HF_API_KEY || "dummy_hf_key");
 
 // ─── Helper: chat completion (non-streaming) ─────────────────────────────────
 export async function chatCompletion(

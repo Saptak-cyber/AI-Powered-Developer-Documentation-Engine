@@ -103,7 +103,20 @@ export async function POST(req: NextRequest) {
       successfullyGenerated: generatedCount,
     });
   } catch (error: any) {
-    console.error("Generate Error:", error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    console.error("Generate API Error Detailed:", {
+      message: error.message,
+      status: error.status,
+      data: error.data,
+      url: error.url,
+      stack: error.stack,
+    });
+    
+    const errorMessage = error.data ? `API Error (${error.status}): ${JSON.stringify(error.data)}` : error.message;
+    
+    return NextResponse.json({ 
+      error: errorMessage,
+      details: error.data,
+      url: error.url
+    }, { status: 500 });
   }
 }
