@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { DeleteRepoButton } from "@/components/DeleteRepoButton";
 import { GenerateDocsButton } from "@/components/GenerateDocsButton";
 import { CheckUpdatesButton } from "@/components/CheckUpdatesButton";
+import { AutoUpdatePoller } from "@/components/AutoUpdatePoller";
 
 export const dynamic = "force-dynamic";
 
@@ -156,6 +157,8 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      <AutoUpdatePoller repos={repos.map(r => ({ id: r.id, owner: r.owner, name: r.name }))} />
     </div>
   );
 }
