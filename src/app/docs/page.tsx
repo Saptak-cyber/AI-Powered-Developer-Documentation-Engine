@@ -5,6 +5,8 @@ import { Search, AlertCircle, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Staleness } from "@prisma/client";
 
+import { DocsFilterForm } from "@/components/DocsFilterForm";
+
 export const dynamic = "force-dynamic";
 
 export default async function DocsPage({
@@ -77,66 +79,12 @@ export default async function DocsPage({
       </div>
 
       {/* Filter Form */}
-      <form
-        method="GET"
-        action="/docs"
-        className="flex flex-col lg:flex-row gap-4 p-4 rounded-xl border border-white/5 bg-white/[0.02]"
-      >
-        {/* Search Query */}
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-          <Input
-            name="q"
-            placeholder="Search by function, class or file path..."
-            className="pl-9 bg-slate-950/40 border-white/5 focus:border-primary"
-            defaultValue={query}
-          />
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Repository Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
-              Repo:
-            </span>
-            <select
-              name="repoId"
-              defaultValue={selectedRepoId}
-              className="h-10 px-3 bg-slate-950 border border-white/5 rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-mono w-full sm:w-48"
-            >
-              <option value="ALL">All Repositories</option>
-              {repos.map((repo) => (
-                <option key={repo.id} value={repo.id}>
-                  {repo.owner}/{repo.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Staleness Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">
-              Status:
-            </span>
-            <select
-              name="staleness"
-              defaultValue={stalenessFilter}
-              className="h-10 px-3 bg-slate-950 border border-white/5 rounded-md text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-primary focus:border-primary font-mono w-full sm:w-48"
-            >
-              <option value="ALL">All Statuses</option>
-              <option value="OK">✅ OK</option>
-              <option value="REVIEW_RECOMMENDED">🔵 Review Recommended</option>
-              <option value="POTENTIALLY_OUTDATED">⚠️ Potentially Outdated</option>
-              <option value="BROKEN">🔴 Broken</option>
-            </select>
-          </div>
-
-          {/* Submit */}
-          <Button type="submit" className="w-full sm:w-auto px-6 font-semibold">
-            Apply Filters
-          </Button>
-        </div>
-      </form>
+      <DocsFilterForm 
+        initialQuery={query}
+        initialRepoId={selectedRepoId}
+        initialStaleness={stalenessFilter}
+        repos={repos}
+      />
 
       {/* Result count hint */}
       <p className="text-xs text-muted-foreground font-mono">

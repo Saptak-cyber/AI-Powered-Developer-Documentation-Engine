@@ -12,9 +12,11 @@ import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { ApproveDraftButton } from "./ApproveDraftButton";
 
-export default async function DocDetailPage({ params }: { params: { id: string } }) {
+export default async function DocDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  
   const unit = await prisma.codeUnit.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { doc: true, repo: true },
   });
 
