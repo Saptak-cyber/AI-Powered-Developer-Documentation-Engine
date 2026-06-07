@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DeleteRepoButton } from "@/components/DeleteRepoButton";
 import { GenerateDocsButton } from "@/components/GenerateDocsButton";
+import { CheckUpdatesButton } from "@/components/CheckUpdatesButton";
 
 export const dynamic = "force-dynamic";
 
@@ -139,6 +140,7 @@ export default async function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        <CheckUpdatesButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
                         <GenerateDocsButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
                         <DeleteRepoButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
                         <Link href={`/docs?repoId=${repo.id}`}>
