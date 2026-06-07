@@ -5,6 +5,7 @@ import { Book, FileCode2, GitBranch, FolderOpen, ArrowRight, Terminal, Sparkles 
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DeleteRepoButton } from "@/components/DeleteRepoButton";
+import { GenerateDocsButton } from "@/components/GenerateDocsButton";
 
 export const dynamic = "force-dynamic";
 
@@ -138,6 +139,7 @@ export default async function DashboardPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-1">
+                        <GenerateDocsButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
                         <DeleteRepoButton repoId={repo.id} repoName={`${repo.owner}/${repo.name}`} />
                         <Link href={`/docs?repoId=${repo.id}`}>
                           <Button size="icon" variant="ghost" className="hover:translate-x-1 transition-transform">
