@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Book, GitBranch, MessageSquare, LayoutDashboard } from "lucide-react";
+import { Book, GitBranch, MessageSquare, LayoutDashboard, PenTool } from "lucide-react";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -30,6 +30,10 @@ export default function RootLayout({
                 <Link href="/changes" className="hover:text-foreground transition-colors flex items-center gap-2">
                   <GitBranch className="w-4 h-4" />
                   Changes
+                </Link>
+                <Link href="/drafts" className="hover:text-foreground transition-colors flex items-center gap-2">
+                  <PenTool className="w-4 h-4" />
+                  Drafts
                 </Link>
                 <Link href="/chat" className="hover:text-foreground transition-colors flex items-center gap-2">
                   <MessageSquare className="w-4 h-4" />
