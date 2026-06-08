@@ -36,29 +36,17 @@ npx prisma db push
 ```
 
 ### 4. Configuration (`.env.local`)
-Create a `.env.local` file in the root of the project with the following configuration:
+The project uses `.env.local` for environment variables. A template is provided in `.env.local.example`.
+
+Copy the example file to create your local configuration:
 
 ```bash
-# ─── LLM Provider (OpenAI-compatible) ───────────────────────────
-LLM_API_KEY=your-api-key
-LLM_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4o-mini
-
-# ─── Embedding Model ─────────────────────────────────────────────
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSIONS=1536
-
-# ─── Neon DB ─────────────────────────────────────────────────────
-DATABASE_URL=postgresql://user:pass@ep-xxx.neon.tech/neondb?sslmode=require
-
-# ─── Qdrant Cloud ────────────────────────────────────────────────
-QDRANT_URL=https://xxx.qdrant.io
-QDRANT_API_KEY=your-qdrant-api-key
-QDRANT_COLLECTION=doc_embeddings
-
-# ─── GitHub ──────────────────────────────────────────────────────
-GITHUB_TOKEN=ghp_your_personal_access_token
+cp .env.local.example .env.local
 ```
+
+Then open `.env.local` and fill in your actual API keys (LLM Provider, HuggingFace, Neon DB, Qdrant, and GitHub). 
+
+> **Note:** `.env.local` is ignored by Git, ensuring your secrets are never committed. The `.env.local.example` file is kept public as a reference.
 
 ---
 
