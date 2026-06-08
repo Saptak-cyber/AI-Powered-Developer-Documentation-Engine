@@ -49,10 +49,20 @@ export async function POST(req: NextRequest) {
       change.diffContent || ""
     );
 
+    console.log("\n==================================================");
+    console.log(`[Suggest AI Fix] Triggered for Code Unit: ${doc.unit.name}`);
+    console.log(`[Suggest AI Fix] System Prompt:\n${UPDATE_DRAFT_SYSTEM_PROMPT}`);
+    console.log(`[Suggest AI Fix] User Prompt:\n${prompt}`);
+    console.log("==================================================\n");
+
     const draftContent = await chatCompletion([
       { role: "system", content: UPDATE_DRAFT_SYSTEM_PROMPT },
       { role: "user", content: prompt },
     ]);
+
+    console.log("\n==================================================");
+    console.log(`[Suggest AI Fix] Received LLM Response:\n${draftContent}`);
+    console.log("==================================================\n");
 
     await prisma.documentation.update({
       where: { id: docId },

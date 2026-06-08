@@ -44,12 +44,27 @@ export async function chatCompletion(
   messages: OpenAI.Chat.ChatCompletionMessageParam[],
   options?: Partial<OpenAI.Chat.ChatCompletionCreateParamsNonStreaming>
 ): Promise<string> {
-  const response = await llmClient.chat.completions.create({
-    model: LLM_MODEL,
-    messages,
-    ...options,
-  });
-  return response.choices[0]?.message?.content ?? "";
+  const payloadSize = JSON.stringify(messages).length;
+  console.log(`[LLM] Sending request to ${LLM_MODEL} at ${llmClient.baseURL}`);
+  console.log(`[LLM] Payload size: ~${Math.round(payloadSize / 1024)} KB (${messages.length} messages)`);
+  const startTime = Date.now();
+
+  try {
+    const response = await llmClient.chat.completions.create({
+      model: LLM_MODEL,
+      messages,
+      ...options,
+    });
+    
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`[LLM] Successfully generated response in ${duration}s`);
+    return response.choices[0]?.message?.content ?? "";
+  } catch (error: any) {
+    const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.error(`[LLM] Request failed after ${duration}s`);
+    console.error(`[LLM] Error Details:`, error.status, error.headers, error.message);
+    throw error;
+  }
 }
 
 // ─── Helper: generate embedding vector via HuggingFace Inference API ─────────
