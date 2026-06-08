@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { InferenceClient } from "@huggingface/inference";
+import { wrapOpenAI } from "langsmith/wrappers";
 
 // ─── Validate required env vars at module load ────────────────────────────────
 const requiredEnvVars = ["LLM_API_KEY", "LLM_BASE_URL", "LLM_MODEL", "EMBEDDING_MODEL"];
@@ -21,10 +22,12 @@ if (!process.env.HF_TOKEN && !process.env.HF_API_KEY && process.env.NODE_ENV !==
  *
  * Swap providers by only changing .env.local — zero code changes needed.
  */
-export const llmClient = new OpenAI({
+const rawClient = new OpenAI({
   apiKey: process.env.LLM_API_KEY || "dummy_key",
   baseURL: process.env.LLM_BASE_URL || "https://dummy.com",
 });
+
+export const llmClient = wrapOpenAI(rawClient);
 
 export const LLM_MODEL = process.env.LLM_MODEL || "dummy_model";
 export const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "BAAI/bge-small-en-v1.5";

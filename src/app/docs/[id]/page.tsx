@@ -48,7 +48,7 @@ export default async function DocDetailPage({ params }: { params: Promise<{ id: 
         </div>
       </div>
 
-      <Tabs defaultValue={hasDraft ? "draft" : "doc"}>
+      <Tabs key={hasDraft ? "with-draft" : "without-draft"} defaultValue={hasDraft ? "draft" : "doc"}>
         <TabsList>
           {hasDraft && <TabsTrigger value="draft">Review Draft</TabsTrigger>}
           <TabsTrigger value="doc">Current Documentation</TabsTrigger>
