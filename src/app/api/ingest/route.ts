@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseGitHubUrl, getRepoTree, getFileContent } from "@/lib/github";
-import { parseTypeScript } from "@/lib/parsers/babel";
-import { parsePython } from "@/lib/parsers/treesitter";
+import { parseCodeWithTreeSitter, LANGUAGE_CONFIGS } from "@/lib/parsers/treesitter";
 import { prisma } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
@@ -22,16 +21,13 @@ export async function POST(req: NextRequest) {
     // Fetch repository tree
     const { commitSha, tree } = await getRepoTree(owner, repo, branch);
 
-    // Filter for supported files (.ts, .tsx, .js, .jsx, .py)
+    // Filter for supported files based on LANGUAGE_CONFIGS
+    const supportedExtensions = Object.values(LANGUAGE_CONFIGS).flatMap(c => c.extensions);
     const sourceFiles = tree.filter(
       (file) =>
         file.type === "blob" &&
         file.path &&
-        (file.path.endsWith(".ts") ||
-          file.path.endsWith(".tsx") ||
-          file.path.endsWith(".js") ||
-          file.path.endsWith(".jsx") ||
-          file.path.endsWith(".py"))
+        supportedExtensions.some(ext => file.path.toLowerCase().endsWith(ext))
     );
 
     // Upsert the Repository record
@@ -64,17 +60,12 @@ export async function POST(req: NextRequest) {
 
       try {
         const content = await getFileContent(owner, repo, file.sha);
-        const parsedUnits = file.path.endsWith(".py")
-          ? parsePython(content, file.path)
-          : parseTypeScript(content, file.path);
+        const parsedUnits = await parseCodeWithTreeSitter(content, file.path);
 
         for (const unit of parsedUnits) {
-          // Determine language
-          const language = file.path.endsWith(".py")
-            ? "python"
-            : file.path.endsWith(".ts") || file.path.endsWith(".tsx")
-            ? "typescript"
-            : "javascript";
+          // Determine language based on extensions
+          const ext = "." + file.path.split('.').pop()?.toLowerCase();
+          const language = Object.keys(LANGUAGE_CONFIGS).find(k => LANGUAGE_CONFIGS[k].extensions.includes(ext)) || "unknown";
 
           // Upsert CodeUnit (relying on repoId + filePath + name as a pseudo-key)
           // Since we don't have a unique constraint on those three, we delete existing ones for this file first

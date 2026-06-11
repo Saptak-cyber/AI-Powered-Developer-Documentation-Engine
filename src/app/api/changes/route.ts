@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCommitsSince, getCommitDiff, getFileAtCommit } from "@/lib/github";
-import { parseTypeScript } from "@/lib/parsers/babel";
-import { parsePython } from "@/lib/parsers/treesitter";
+import { parseCodeWithTreeSitter, LANGUAGE_CONFIGS } from "@/lib/parsers/treesitter";
 import { classifyStaleness } from "@/lib/staleness";
 import { prisma } from "@/lib/db";
 
@@ -56,14 +55,14 @@ export async function POST(req: NextRequest) {
 
       // 3. For each changed file, analyze code units
       for (const filePath of Array.from(changedFiles)) {
-        if (!filePath.match(/\.(ts|tsx|js|jsx|py)$/)) continue;
+        const supportedExtensions = Object.values(LANGUAGE_CONFIGS).flatMap(c => c.extensions);
+        const fileExt = filePath.substring(filePath.lastIndexOf('.')).toLowerCase();
+        if (!supportedExtensions.includes(fileExt)) continue;
 
         try {
           // Fetch the NEW content of this file at this specific commit
           const newContent = await getFileAtCommit(repo.owner, repo.name, filePath, commit.sha);
-          const newUnits = filePath.endsWith(".py")
-            ? parsePython(newContent, filePath)
-            : parseTypeScript(newContent, filePath);
+          const newUnits = await parseCodeWithTreeSitter(newContent, filePath);
           const newUnitsMap = new Map(newUnits.map(u => [u.name, u]));
 
           // Find existing (OLD) units for this file

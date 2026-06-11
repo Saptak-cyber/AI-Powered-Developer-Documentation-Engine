@@ -74,6 +74,15 @@ export async function POST(req: Request) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        // Vercel AI SDK Protocol: Send message annotation with source references first
+        if (contextDocs.length > 0) {
+          const annotation = [{
+            type: "references",
+            data: contextDocs.map(d => ({ filePath: d.filePath, unitName: d.unitName }))
+          }];
+          controller.enqueue(new TextEncoder().encode(`8:${JSON.stringify(annotation)}\n`));
+        }
+
         for await (const chunk of response) {
           const text = chunk.choices[0]?.delta?.content || "";
           if (text) {

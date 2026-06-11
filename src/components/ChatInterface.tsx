@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
-import { Bot, User, Send, Loader2 } from "lucide-react";
+import { Bot, User, Send, Loader2, FileCode2 } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 export function ChatInterface({ repoId }: { repoId: string }) {
@@ -62,6 +62,30 @@ export function ChatInterface({ repoId }: { repoId: string }) {
                     ) : (
                        <div className="w-full">
                          <MarkdownRenderer content={message.content} />
+                         {message.annotations && (
+                           <>
+                             {(() => {
+                               const refAnnotation = (message.annotations as any[]).find(a => a?.type === "references");
+                               const references = refAnnotation?.data || [];
+                               if (references.length === 0) return null;
+                               return (
+                                 <div className="mt-4 pt-3 border-t border-border/50">
+                                   <p className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1">
+                                     <FileCode2 className="w-3 h-3" /> Sources
+                                   </p>
+                                   <div className="flex flex-wrap gap-2">
+                                     {references.map((ref: any, idx: number) => (
+                                       <div key={idx} className="bg-background/50 border border-border px-2 py-1 rounded text-xs flex flex-col max-w-full" title={ref.filePath}>
+                                         <span className="font-mono text-primary truncate">{ref.unitName}</span>
+                                         <span className="text-[10px] text-muted-foreground truncate">{ref.filePath}</span>
+                                       </div>
+                                     ))}
+                                   </div>
+                                 </div>
+                               );
+                             })()}
+                           </>
+                         )}
                        </div>
                     )}
                   </div>

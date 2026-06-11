@@ -1,217 +1,262 @@
+import path from "path";
+
+// web-tree-sitter exports a namespace object; Parser and Language are nested exports
+const WTS = require("web-tree-sitter");
+const TreeParser = WTS.Parser as any;
+const TreeLanguage = WTS.Language as any;
+
 export interface ParsedCodeUnit {
   name: string;
-  type: "function" | "class" | "module" | "method" | "arrow_function";
-  signature: string | null;
-  docstring: string | null;
+  type: string;
+  signature: string;
   rawCode: string;
+  docstring: string | null;
   lineStart: number;
   lineEnd: number;
 }
 
-export function parsePython(sourceCode: string, filePath: string): ParsedCodeUnit[] {
+let parserInstance: any = null;
+const loadedLanguages = new Map<string, any>();
+
+export const LANGUAGE_CONFIGS: Record<
+  string,
+  {
+    extensions: string[];
+    wasmName: string;
+    queryNodeTypes: string[];
+    getName: (node: any) => string | null;
+    getDocstring: (node: any) => string | null;
+    getSignature: (node: any) => string;
+  }
+> = {
+  python: {
+    extensions: [".py"],
+    wasmName: "python",
+    queryNodeTypes: ["function_definition", "class_definition"],
+    getName: (node) => node.childForFieldName("name")?.text || null,
+    getSignature: (node: any) => {
+      const name = node.childForFieldName("name")?.text || "";
+      if (node.type === "class_definition") return `class ${name}`;
+      const params = node.childForFieldName("parameters")?.text || "()";
+      const returnType = node.childForFieldName("return_type")?.text; // includes " -> type"
+      return `def ${name}${params}${returnType ? ` ${returnType}` : ""}`;
+    },
+    getDocstring: (node) => {
+      const body = node.childForFieldName("body");
+      if (body && body.children.length > 0) {
+        const firstStmt = body.children[0];
+        if (firstStmt.type === "expression_statement") {
+          const strNode = firstStmt.children[0];
+          if (strNode && strNode.type === "string") {
+            return strNode.text.replace(/^"""|"""$/g, "").replace(/^'''|'''$/g, "").trim();
+          }
+        }
+      }
+      return null;
+    },
+  },
+  typescript: {
+    extensions: [".ts", ".tsx", ".js", ".jsx"],
+    wasmName: "tsx", // Use tsx wasm to support TS and JSX syntax gracefully
+    queryNodeTypes: ["function_declaration", "class_declaration", "method_definition", "export_statement", "lexical_declaration"],
+    getName: (node) => {
+      if (node.type === "export_statement") {
+        const decl = node.children.find((c: any) => ["function_declaration", "class_declaration", "lexical_declaration"].includes(c.type));
+        if (!decl) return null;
+        node = decl;
+      }
+      if (node.type === "lexical_declaration") {
+        const declr = node.children.find((c: any) => c.type === "variable_declarator");
+        const val = declr?.childForFieldName("value");
+        if (val && (val.type === "arrow_function" || val.type === "function")) {
+          return declr?.childForFieldName("name")?.text || null;
+        }
+        return null;
+      }
+      return node.childForFieldName("name")?.text || null;
+    },
+    getSignature: (node) => {
+      let target = node;
+      if (node.type === "export_statement") {
+        const decl = node.children.find((c: any) => ["function_declaration", "class_declaration", "lexical_declaration"].includes(c.type));
+        if (decl) target = decl;
+      }
+      
+      if (target.type === "lexical_declaration") {
+        const declr = target.children.find((c: any) => c.type === "variable_declarator");
+        const name = declr?.childForFieldName("name")?.text || "anonymous";
+        const val = declr?.childForFieldName("value");
+        if (val) {
+           const params = val.childForFieldName("parameters")?.text || "()";
+           const returnType = val.childForFieldName("return_type")?.text || "";
+           return `const ${name} = ${params}${returnType ? `: ${returnType}` : ""} => {...}`;
+        }
+      }
+
+      const name = target.childForFieldName("name")?.text || "anonymous";
+      if (target.type === "class_declaration") return `class ${name}`;
+      
+      const params = target.childForFieldName("parameters")?.text || "()";
+      const returnType = target.childForFieldName("return_type")?.text || ""; // TS return_type includes the leading ': '
+      return `function ${name}${params}${returnType ? ` ${returnType}` : ""}`;
+    },
+    getDocstring: (node) => {
+      let prev = node.previousSibling;
+      // Handle exported nodes where the comment might be above the export statement
+      if (node.parent && node.parent.type === "export_statement") {
+         prev = node.parent.previousSibling;
+      }
+      const comments = [];
+      while (prev && prev.type === "comment") {
+        comments.unshift(prev.text.replace(/^\/\*\*?|\*\/|^\/\//gm, "").trim());
+        prev = prev.previousSibling;
+      }
+      return comments.length > 0 ? comments.join("\n") : null;
+    },
+  },
+  go: {
+    extensions: [".go"],
+    wasmName: "go",
+    queryNodeTypes: ["function_declaration", "method_declaration"],
+    getName: (node) => node.childForFieldName("name")?.text || null,
+    getSignature: (node) => {
+       const name = node.childForFieldName("name")?.text || "";
+       const params = node.childForFieldName("parameters")?.text || "()";
+       const result = node.childForFieldName("result")?.text || "";
+       const receiver = node.childForFieldName("receiver")?.text || "";
+       return `func ${receiver ? receiver + " " : ""}${name}${params} ${result}`.trim();
+    },
+    getDocstring: (node) => {
+      let prev = node.previousSibling;
+      const comments = [];
+      while (prev && prev.type === "comment") {
+        comments.unshift(prev.text.replace(/^\/\//gm, "").trim());
+        prev = prev.previousSibling;
+      }
+      return comments.length > 0 ? comments.join("\n") : null;
+    }
+  },
+  java: {
+    extensions: [".java"],
+    wasmName: "java",
+    queryNodeTypes: ["class_declaration", "method_declaration"],
+    getName: (node) => node.childForFieldName("name")?.text || null,
+    getSignature: (node) => {
+      const name = node.childForFieldName("name")?.text || "";
+      if (node.type === "class_declaration") return `class ${name}`;
+      const params = node.childForFieldName("parameters")?.text || "()";
+      const type = node.childForFieldName("type")?.text || "void";
+      return `${type} ${name}${params}`;
+    },
+    getDocstring: (node) => {
+      let prev = node.previousSibling;
+      if (prev && prev.type === "modifiers") {
+         prev = prev.previousSibling;
+      }
+      const comments = [];
+      while (prev && prev.type === "comment" || prev?.type === "block_comment") {
+        comments.unshift(prev.text.replace(/^\/\*\*?|\*\/|^\/\//gm, "").trim());
+        prev = prev.previousSibling;
+      }
+      return comments.length > 0 ? comments.join("\n") : null;
+    }
+  },
+  rust: {
+    extensions: [".rs"],
+    wasmName: "rust",
+    queryNodeTypes: ["function_item", "struct_item"],
+    getName: (node) => node.childForFieldName("name")?.text || null,
+    getSignature: (node) => {
+      const name = node.childForFieldName("name")?.text || "";
+      if (node.type === "struct_item") return `struct ${name}`;
+      const params = node.childForFieldName("parameters")?.text || "()";
+      const ret = node.childForFieldName("return_type")?.text || "";
+      return `fn ${name}${params} ${ret}`.trim();
+    },
+    getDocstring: (node) => {
+      let prev = node.previousSibling;
+      const comments = [];
+      while (prev && prev.type === "line_comment") {
+        comments.unshift(prev.text.replace(/^\/\/\/?/gm, "").trim());
+        prev = prev.previousSibling;
+      }
+      return comments.length > 0 ? comments.join("\n") : null;
+    }
+  }
+};
+
+export async function getTreeSitterParser(language: string): Promise<any> {
+  if (!parserInstance) {
+    await TreeParser.init({
+      locateFile(scriptName: string, scriptDirectory: string) {
+        if (scriptName === "web-tree-sitter.wasm" || scriptName === "tree-sitter.wasm") {
+          return path.join(process.cwd(), "node_modules", "web-tree-sitter", scriptName);
+        }
+        return scriptDirectory + scriptName;
+      }
+    });
+    parserInstance = new TreeParser();
+  }
+
+  if (!loadedLanguages.has(language)) {
+    // Pass the .wasm file path directly to Language.load (required by @repomix/tree-sitter-wasms)
+    const wasmPath = path.join(process.cwd(), "node_modules", "@repomix", "tree-sitter-wasms", "out", `tree-sitter-${language}.wasm`);
+    const Lang = await TreeLanguage.load(wasmPath);
+    loadedLanguages.set(language, Lang);
+  }
+
+  parserInstance.setLanguage(loadedLanguages.get(language));
+  return parserInstance;
+}
+
+export async function parseCodeWithTreeSitter(content: string, filePath: string): Promise<ParsedCodeUnit[]> {
+  // Determine language config based on extension
+  const ext = path.extname(filePath).toLowerCase();
+  const configKey = Object.keys(LANGUAGE_CONFIGS).find((k) => LANGUAGE_CONFIGS[k].extensions.includes(ext));
+  
+  if (!configKey) {
+    // Fallback: If we don't have a specific language config, we just ignore it or return empty
+    return [];
+  }
+
+  const config = LANGUAGE_CONFIGS[configKey];
+  const parser = await getTreeSitterParser(config.wasmName);
+  const tree = parser.parse(content);
+
   const units: ParsedCodeUnit[] = [];
-  const lines = sourceCode.split(/\r?\n/);
-  
-  // 1. Add module-level unit
-  units.push({
-    name: filePath.split("/").pop() || "module",
-    type: "module",
-    signature: null,
-    docstring: extractModuleDocstring(lines),
-    rawCode: sourceCode.slice(0, 500) + (sourceCode.length > 500 ? "..." : ""),
-    lineStart: 1,
-    lineEnd: lines.length || 1,
-  });
 
-  // A helper function to compute indentation level (number of spaces/tabs)
-  function getIndentation(line: string): number {
-    const match = line.match(/^([ \t]*)/);
-    if (!match) return 0;
-    // Count tabs as 4 spaces for uniform comparison
-    return match[1].replace(/\t/g, "    ").length;
-  }
-
-  // A helper to check if a line is completely empty or a pure comment line
-  function isEmptyOrComment(line: string): boolean {
-    const trimmed = line.trim();
-    return trimmed === "" || trimmed.startsWith("#");
-  }
-
-  // Scan all lines
-  let currentClass: { name: string; indent: number } | null = null;
-
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-
-    // Track class scopes by checking if we have dropped out of the class's indentation
-    if (currentClass && !isEmptyOrComment(line) && getIndentation(line) <= currentClass.indent) {
-      currentClass = null;
+  function traverse(node: any) {
+    if (config.queryNodeTypes.includes(node.type)) {
+      const name = config.getName(node);
+      if (name) {
+        let type = "function";
+        if (node.type.includes("class") || node.type.includes("struct")) type = "class";
+        if (node.type.includes("method")) type = "method";
+        
+        // Avoid duplicating units if we processed export_statement which contains the actual declaration
+        const existing = units.find(u => u.name === name && u.lineStart === node.startPosition.row + 1);
+        if (!existing) {
+          units.push({
+            name,
+            type,
+            signature: config.getSignature(node),
+            rawCode: node.text,
+            docstring: config.getDocstring(node),
+            lineStart: node.startPosition.row + 1,
+            lineEnd: node.endPosition.row + 1,
+          });
+        }
+      }
     }
-
-    // Match Class definitions
-    const classMatch = line.match(/^([ \t]*)class\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
-    if (classMatch) {
-      const indent = getIndentation(line);
-      const className = classMatch[2];
-      currentClass = { name: className, indent };
-
-      // Parse signature
-      const { signature, endIdx } = parseDeclarationSignature(lines, i);
-      const docstring = parseDocstring(lines, endIdx + 1);
-      const { rawCode, lineEnd } = getPythonBody(lines, i, endIdx, indent);
-
-      units.push({
-        name: className,
-        type: "class",
-        signature,
-        docstring,
-        rawCode,
-        lineStart: i + 1,
-        lineEnd,
-      });
-      continue;
-    }
-
-    // Match Def definitions
-    const defMatch = line.match(/^([ \t]*)def\s+([a-zA-Z_][a-zA-Z0-9_]*)/);
-    if (defMatch) {
-      const indent = getIndentation(line);
-      const funcName = defMatch[2];
-      const isMethod = currentClass && indent > currentClass.indent;
-
-      const { signature, endIdx } = parseDeclarationSignature(lines, i);
-      const docstring = parseDocstring(lines, endIdx + 1);
-      const { rawCode, lineEnd } = getPythonBody(lines, i, endIdx, indent);
-
-      units.push({
-        name: isMethod ? `${currentClass!.name}.${funcName}` : funcName,
-        type: isMethod ? "method" : "function",
-        signature,
-        docstring,
-        rawCode,
-        lineStart: i + 1,
-        lineEnd,
-      });
-    }
-  }
-
-  return units;
-}
-
-// Helpers
-function extractModuleDocstring(lines: string[]): string | null {
-  // Check if the very first non-empty lines contain a docstring
-  let firstIdx = 0;
-  while (firstIdx < lines.length && lines[firstIdx].trim() === "") {
-    firstIdx++;
-  }
-  if (firstIdx >= lines.length) return null;
-
-  const firstLine = lines[firstIdx].trim();
-  if (firstLine.startsWith('"""') || firstLine.startsWith("'''")) {
-    return parseDocstring(lines, firstIdx);
-  }
-  return null;
-}
-
-function parseDeclarationSignature(lines: string[], startIdx: number): { signature: string, endIdx: number } {
-  let content = "";
-  let parenCount = 0;
-  let bracketCount = 0;
-  let braceCount = 0;
-  
-  for (let i = startIdx; i < lines.length; i++) {
-    const line = lines[i];
     
-    for (let charIdx = 0; charIdx < line.length; charIdx++) {
-      const char = line[charIdx];
-      if (char === "(") parenCount++;
-      else if (char === ")") parenCount--;
-      else if (char === "[") bracketCount++;
-      else if (char === "]") bracketCount--;
-      else if (char === "{") braceCount++;
-      else if (char === "}") braceCount--;
-      else if (char === ":" && parenCount === 0 && bracketCount === 0 && braceCount === 0) {
-        const currentLineSlice = line.slice(0, charIdx);
-        const fullSignature = (content + " " + currentLineSlice).trim().replace(/\s+/g, " ");
-        return {
-          signature: fullSignature,
-          endIdx: i,
-        };
+    for (let i = 0; i < node.childCount; i++) {
+      const child = node.child(i);
+      if (child) {
+        traverse(child);
       }
     }
-    content += " " + line.trim();
-  }
-  return { signature: lines[startIdx].trim(), endIdx: startIdx };
-}
-
-function parseDocstring(lines: string[], startIdx: number): string | null {
-  // Skip empty lines first
-  let i = startIdx;
-  while (i < lines.length && lines[i].trim() === "") {
-    i++;
-  }
-  if (i >= lines.length) return null;
-
-  const line = lines[i].trim();
-  const quoteChar = line.startsWith('"""') ? '"""' : line.startsWith("'''") ? "'''" : null;
-  if (!quoteChar) return null;
-
-  // Single-line docstring e.g. """docstring"""
-  if (line.startsWith(quoteChar) && line.slice(quoteChar.length).includes(quoteChar)) {
-    const endQuoteIdx = line.indexOf(quoteChar, quoteChar.length);
-    return line.slice(quoteChar.length, endQuoteIdx).trim();
   }
 
-  // Multi-line docstring
-  let docstring = line.slice(quoteChar.length) + "\n";
-  i++;
-  while (i < lines.length) {
-    const curLine = lines[i];
-    if (curLine.includes(quoteChar)) {
-      const endQuoteIdx = curLine.indexOf(quoteChar);
-      docstring += curLine.slice(0, endQuoteIdx);
-      return docstring.trim();
-    }
-    docstring += curLine + "\n";
-    i++;
-  }
-
-  return docstring.trim();
-}
-
-function getPythonBody(lines: string[], startIdx: number, endIdx: number, declarationIndent: number): { rawCode: string, lineEnd: number } {
-  let bodyLines: string[] = [];
-  
-  // Include all lines of the signature
-  for (let idx = startIdx; idx <= endIdx; idx++) {
-    bodyLines.push(lines[idx]);
-  }
-
-  let i = endIdx + 1;
-  let lastNonEmptyIdx = endIdx;
-
-  while (i < lines.length) {
-    const line = lines[i];
-    const isCommentOrEmpty = line.trim() === "" || line.trim().startsWith("#");
-
-    if (!isCommentOrEmpty) {
-      const currentIndent = line.match(/^([ \t]*)/)?.[1].replace(/\t/g, "    ").length ?? 0;
-      if (currentIndent <= declarationIndent) {
-        break; // Out of scope
-      }
-    }
-
-    bodyLines.push(line);
-    if (!isCommentOrEmpty) {
-      lastNonEmptyIdx = i;
-    }
-    i++;
-  }
-
-  const finalLines = bodyLines.slice(0, lastNonEmptyIdx - startIdx + 1);
-  return {
-    rawCode: finalLines.join("\n"),
-    lineEnd: lastNonEmptyIdx + 1,
-  };
+  traverse(tree.rootNode);
+  return units;
 }
