@@ -5,9 +5,7 @@ import { DiffViewer } from "@/components/DiffViewer";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import ReactMarkdown from "react-markdown";
-import rehypeHighlight from "rehype-highlight";
-import "highlight.js/styles/github-dark.css";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 import { ApproveDraftButton } from "./ApproveDraftButton";
@@ -74,10 +72,8 @@ export default async function DocDetailPage({ params }: { params: Promise<{ id: 
         )}
 
         <TabsContent value="doc" className="mt-4">
-          <div className="prose prose-slate dark:prose-invert max-w-none border rounded-lg p-8 bg-card shadow-sm">
-            <ReactMarkdown rehypePlugins={[rehypeHighlight]}>
-              {unit.doc.content}
-            </ReactMarkdown>
+          <div className="w-full">
+            <MarkdownRenderer content={unit.doc.content} />
           </div>
         </TabsContent>
 

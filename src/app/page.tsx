@@ -33,7 +33,7 @@ export default async function DashboardPage() {
         </div>
         <div className="relative z-10 space-y-2 max-w-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-semibold tracking-wide border border-primary/20 mb-2">
-            <Sparkles className="w-3.5 h-3.5" />
+            {/* <Sparkles className="w-3.5 h-3.5" /> */}
             AI-Powered Code Intelligence
           </div>
           <h1 className="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">

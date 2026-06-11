@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@/components/ui/card";
 import { Bot, User, Send, Loader2 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
+import { MarkdownRenderer } from "@/components/MarkdownRenderer";
 
 export function ChatInterface({ repoId }: { repoId: string }) {
   const { messages, input, handleInputChange, handleSubmit, isLoading } = useChat({
@@ -60,8 +60,8 @@ export function ChatInterface({ repoId }: { repoId: string }) {
                     {message.role === "user" ? (
                       message.content
                     ) : (
-                       <div className="prose prose-sm dark:prose-invert max-w-none">
-                         <ReactMarkdown>{message.content}</ReactMarkdown>
+                       <div className="w-full">
+                         <MarkdownRenderer content={message.content} />
                        </div>
                     )}
                   </div>
