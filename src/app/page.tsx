@@ -1,13 +1,12 @@
 import { prisma } from "@/lib/db";
 import { IngestForm } from "@/components/IngestForm";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Book, FileCode2, GitBranch, FolderOpen, ArrowRight, Terminal, Sparkles } from "lucide-react";
+import { Book, FileCode2, GitBranch, FolderOpen, ArrowRight, Terminal, Sparkles, RefreshCw, Github, Settings, Plus, Clock } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { DeleteRepoButton } from "@/components/DeleteRepoButton";
 import { GenerateDocsButton } from "@/components/GenerateDocsButton";
 import { CheckUpdatesButton } from "@/components/CheckUpdatesButton";
-import { AutoUpdatePoller } from "@/components/AutoUpdatePoller";
 
 export const dynamic = "force-dynamic";
 
@@ -158,7 +157,6 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <AutoUpdatePoller repos={repos.map(r => ({ id: r.id, owner: r.owner, name: r.name }))} />
     </div>
   );
 }
